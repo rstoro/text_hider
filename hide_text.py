@@ -22,20 +22,21 @@ def load_img(img_path):
 def encode(img_path, msg):
   img, msg_len = load_img(img_path), len(msg)
   enc, w, h = img.copy(), *img.size
+  seen_pixels = [(0, 0), (0, 1)]
 
   #big ol' message eh?
   if msg_len > w*h:
     raise OverflowError('Message too long to encode.')
 
   #encode msg len into r at pixel (0, 0)
-  #NOTE: 255 * 255 * 255 = 16,581,375
   rgba = [*img.getpixel((0, 0))]
   rgba[0] = msg_len
   enc.putpixel((0, 0), tuple(rgba))
 
   #encode cryptographically secure random 3 byte seed into rgb at pixel (0, 1)
+  #NOTE: 255 * 255 * 255 = 16,581,375
   s = urandom(3)
-  seed(0)
+  seed(s)
   rgba = [*img.getpixel((0, 1))]
   rgba[0:3] = s[0:3]
   enc.putpixel((0, 1), tuple(rgba))
@@ -43,8 +44,10 @@ def encode(img_path, msg):
   #encode msg into r at seeded random pixel
   for i in range(msg_len):
     cur_xy = (randrange(w), randrange(h))
-    while cur_xy in [(0, 0), (0, 1)]:
+    while cur_xy in seen_pixels:
       cur_xy = (randrange(w), randrange(h))
+
+    seen_pixels.append(cur_xy)
 
     rgba = [*img.getpixel(cur_xy)]
     rgba[0] = ord(msg[i]) 
@@ -56,17 +59,22 @@ def encode(img_path, msg):
 def decode(img_path):
   img = load_img(img_path)
   w, h = img.size
+  seen_pixels = [(0, 0), (0, 1)]
   msg_len = [*img.getpixel((0, 0))][0]
   rgba = [*img.getpixel((0, 1))]
   s = rgba[0].to_bytes(1, 'big') + rgba[1].to_bytes(1, 'big') + rgba[2].to_bytes(1, 'big')
-  seed(0)
+  seed(s)
 
+  out = ''
   for _ in range(msg_len):
     cur_xy = (randrange(w), randrange(h))
-    rgba = [*img.getpixel(cur_xy)]
+    while cur_xy in seen_pixels:
+      cur_xy = (randrange(w), randrange(h))
 
-  seed(0)
-  return ''.join(chr(img.getpixel((randrange(w), randrange(h)))[0]) for _ in range(msg_len))
+    seen_pixels.append(cur_xy)
+    out += chr([*img.getpixel(cur_xy)][0])
+
+  return out
 
 
 if __name__ == '__main__':
