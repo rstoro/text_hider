@@ -13,6 +13,7 @@ class Crc32(object):
           crc = ((crc >> 1) & 0x7FFFFFFF)
       self._crc_table[i] = crc
 
+
   def get(self, bs):
     value = 0xFFFFFFFF
     for i in range(len(bs)):
@@ -27,7 +28,6 @@ class Crc32(object):
 
     odd = [0xEDB88320] + [1 << i for i in range(31)]
     even = [0] * 32
-
 
     def matrix_mult(matrix, vector):
       number_sum = 0
@@ -129,7 +129,6 @@ class Image(object):
         elif readable_type_or_name == 'PLTE':
           #broken into 3byte chunks of hex color map
           self._palette = [(data[i], data[i+1], data[i+2]) for i in range(0, len(data), 3)]
-          print(self._palette)
         elif readable_type_or_name == 'IDAT':
           #TODO: deinterlace
           if self._palette:
