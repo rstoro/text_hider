@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-from zlib import crc32 as test_crc32
+
 
 class Crc32(object):
   def __init__(self):
-    #TODO: remove delcaration of size?
     self._crc_table = [0] * 256
     for i in range(256):
       crc = i
@@ -21,12 +20,14 @@ class Crc32(object):
 
     return value ^ 0xFFFFFFFF
 
+
   def combine(self, crc1, crc2, len2):
     if len2 <= 0:
       return crc1
 
     odd = [0xEDB88320] + [1 << i for i in range(31)]
     even = [0] * 32
+
 
     def matrix_mult(matrix, vector):
       number_sum = 0
@@ -58,6 +59,7 @@ class Crc32(object):
     crc1 ^= crc2
     return crc1
 
+
 class Image(object):
   _GRAYSCALE = 'grayscale'
   _TRUECOLOR = 'truecolor'
@@ -72,6 +74,7 @@ class Image(object):
     4: _GRAYSCALE_ALPHA,
     6: _TRUECOLOR_ALPHA
   }
+
 
   def __init__(self, image_name):
     self._chunks = []
@@ -128,21 +131,16 @@ class Image(object):
           self._palette = [(data[i], data[i+1], data[i+2]) for i in range(0, len(data), 3)]
           print(self._palette)
         elif readable_type_or_name == 'IDAT':
-          #TODO: stuff with this
+          #TODO: deinterlace
           if self._palette:
-            #TODO: NOT HOW THIS IS DONE
-            print(len(data))
-            cur_data_ref = [self._palette[data[i]] for i in range(len(data))]
+            pass
           elif self._is_alpha:
-            cur_data_ref = [(data[i], data[i+1], data[i+2], data[i+3]) for i in range(0, len(data), 4)]
+            pass
           else:
-            cur_data_ref = [(data[i], data[i+1], data[i+2], data[i+3]) for i in range(0, len(data), 3)]
-
-          print(cur_data_ref)
+            pass
         elif readable_type_or_name == 'IEND':
           break 
 
-    #read chunks
 
     def save(self):
       #remake checksums (crc32)
