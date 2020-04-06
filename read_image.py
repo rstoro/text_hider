@@ -61,21 +61,7 @@ class Crc32(object):
 
 
 class Image(object):
-  _GRAYSCALE = 'grayscale'
-  _TRUECOLOR = 'truecolor'
-  _INDEXED = 'indexed'
-  _GRAYSCALE_ALPHA = 'grayscale_alpha'
-  _TRUECOLOR_ALPHA = 'truecolor_alpha'
-
-  _COLOR_MAP = {
-    0: _GRAYSCALE,
-    2: _TRUECOLOR,
-    3: _INDEXED,
-    4: _GRAYSCALE_ALPHA,
-    6: _TRUECOLOR_ALPHA
-  }
-
-
+  #NOTE: All integers larger than one byte are stored in network byte order!!!
   def __init__(self, image_name):
     self._chunks = []
     self._image_name = image_name
@@ -109,14 +95,18 @@ class Image(object):
 
         #verify checksum
         assert(self._crc.combine(self._crc.get(type_or_name), self._crc.get(data), len(data)).to_bytes(4, 'big') == crc_checksum)
+        #TODO: if this check fails, fix data
 
-        #store chunk
-        self._chunks.append(length + type_or_name + data + crc_checksum)
+        #store chunk in memory
+        self._chunks.append((length, type_or_name, data, crc_checksum))
 
-        readable_type_or_name = type_or_name.decode('UTF-8')
-        print(readable_type_or_name)
         #critical chunks - NOTE: we do not really care about ancillary chunks
-        if readable_type_or_name == 'IHDR':
+        readable_type_or_name = type_or_name.decode('UTF-8')
+
+        #DEBUG
+        print(readable_type_or_name)
+
+        if readable_type_or_name == 'IHDR':   #header
           self.width = int.from_bytes(data[0:4], 'big')
           self.height = int.from_bytes(data[4:8], 'big')
           self._bit_depth = data[8]   #bit depth determines channel used
@@ -124,30 +114,90 @@ class Image(object):
           self._compression_method = data[10]
           self._filter_method = data[11]
           self._interlace_method = data[12]
-          self._readable_color_type = self._COLOR_MAP[self._color_type]
           self._is_alpha = bool((self._color_type & 0b00000100) >> 2)
-        elif readable_type_or_name == 'PLTE':
-          #broken into 3byte chunks of hex color map
+
+          #DEBUG
+          print('\twidth, height:',self.width, self.height)
+          print('\tbit_depth:', self._bit_depth)
+          print('\tcolor_type:', self._color_type)
+          print('\tcompression_method:', self._compression_method)
+          print('\tfilter_method:', self._filter_method)
+          print('\tinterlace_method:', self._interlace_method)
+          print('\tis_alpha:', self._is_alpha)
+        elif readable_type_or_name == 'PLTE':   #palette being used
+          #NOTE: cannot have palette with alpha stored without some hacks https://www.maptiler.com/news/2008/11/png-palette-with-variable-alpha-small/
+          #broken into 3 byte chunks of hex color map
           self._palette = [(data[i], data[i+1], data[i+2]) for i in range(0, len(data), 3)]
-        elif readable_type_or_name == 'IDAT':
+
+          #DEBUG
+          print('\t', self._palette)
+        elif readable_type_or_name == 'IDAT':   #image pixels
+          '''
+             _____________________________________________
+            |       |           |     binary    |         |
+            | color |   name    |---------------|  mask   |
+            | type  |           |   | A | C | P |         |
+            |_______|___________|___|___|___|___|_________|
+            |       |           |   |   |   |   |         |
+            |   0   | grayscale | 0 | 0 | 0 | 0 |         |
+            |_______|___________|___|___|___|___|_________|
+            |       |           |   |   |   |   |         |
+            |   2   | truecolor | 0 | 0 | 1 | 0 |  color  |
+            |_______|___________|___|___|___|___|_________|
+            |       |           |   |   |   |   |  color  |
+            |   3   |  indexed  | 0 | 0 | 1 | 1 | palette |
+            |_______|___________|___|___|___|___|_________|
+            |       | grayscale |   |   |   |   |         |
+            |   4   | and alpha | 0 | 1 | 0 | 0 |  alpha  |
+            |_______|___________|___|___|___|___|_________|
+            |       | truecolor |   |   |   |   |  alpha  |
+            |   6   | and alpha | 0 | 1 | 1 | 0 |  color  |
+            |_______|___________|___|___|___|___|_________|
+          '''
           #TODO: deinterlace
-          if self._palette:
-            pass
-          elif self._is_alpha:
-            pass
-          else:
-            pass
-        elif readable_type_or_name == 'IEND':
+          #layout and total sized determined by IHDR chunk
+          #compression method #filter method #interlace method
+          #for scanline in len(0, data, self._bit_depth)
+          
+          #palette is a map of reused color values
+          for bits in range(0, len(data), self._bit_depth):
+            if self._palette:
+              print(data[::-1][bits], end='|' if bits+self._bit_depth != len(data) else '\n')
+              pass
+            elif self._is_alpha:
+              pass
+            else:
+              pass
+        elif readable_type_or_name == 'IEND':   #end
           break 
 
 
-    def save(self):
-      #remake checksums (crc32)
+  def save(self):
+    #write out bs to file
+    with open('test_' + self._image_name, 'x') as f:
+      for chunk in self._chunks:
+        length, type_or_name, data, old_crc_checksum = chunk
+        #TODO: remake checksums (crc32) for each chunk
+        f.write(length + type_or_name + data + old_crc_checksum)
 
-      #write out bs to file
-      with open('test_' + self._image_name, 'x') as f:
-        for chunk in self._chunks:
-          f.write(chunk)
+
+  def get_filter_from_type(self, filter_type):
+    def _none(scanline):
+      return scanline
+
+    def _sub(scanline):
+      return scanline
+
+    def _up(scanline):
+      return scanline
+
+    def _average(scanline):
+      return scanline
+
+    def _paeth(scanline):
+      return scanline
+
+    return [_none, _sub, _up, _average, _paeth][filter_type]
 
 
 if __name__ == '__main__':
